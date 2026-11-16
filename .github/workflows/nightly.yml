@@ -26,8 +26,8 @@ concurrency:
 
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/nightly-arm64'
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 30
     permissions:
       contents: read
@@ -38,14 +38,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Require current image inputs
-        run: |
-          git fetch --depth=1 origin main
-          if ! git diff --quiet "${GITHUB_SHA}" FETCH_HEAD -- backend frontend lib docs/package.json package.json pnpm-lock.yaml pnpm-workspace.yaml .nvmrc Dockerfile .dockerignore .github/workflows/nightly.yml; then
-            echo "A newer commit on main changes the image; its nightly replaces this one."
-            exit 1
-          fi
 
       - id: version
         run: echo "value=nightly.${GITHUB_RUN_NUMBER}+${GITHUB_SHA:0:7}" >> "${GITHUB_OUTPUT}"
@@ -65,7 +57,7 @@ jobs:
           provenance: mode=max
           sbom: true
           tags: ghcr.io/${{ github.repository }}:nightly
-          platforms: linux/amd64
+          platforms: linux/arm64
           build-args: |
             APP_VERSION=${{ steps.version.outputs.value }}
             GITHUB_REPO=${{ github.repository }}
@@ -75,7 +67,7 @@ jobs:
 
   status:
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
     permissions:
       contents: read
