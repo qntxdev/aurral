@@ -1,10 +1,15 @@
-
 name: Nightly arm64
 
 on:
   schedule:
     - cron: '17 6 * * *'  # Daily at 06:17 UTC
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build'
+        required: true
+        default: 'main'
+        type: string
 
 concurrency:
   group: nightly-arm64
@@ -19,7 +24,27 @@ jobs:
       packages: write
 
     steps:
+      - name: Resolve branch
+        id: branch
+        env:
+          INPUT_BRANCH: ${{ inputs.branch }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            BRANCH="$INPUT_BRANCH"
+          else
+            BRANCH="main"
+          fi
+
+          if [[ -z "$BRANCH" ]]; then
+            echo "::error::Branch cannot be empty"
+            exit 1
+          fi
+
+          echo "value=$BRANCH" >> "$GITHUB_OUTPUT"
+
       - name: Sync upstream main
+        if: steps.branch.outputs.value == 'main'
         run: gh repo sync "$GITHUB_REPOSITORY" --source lklynet/aurral --branch main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -27,14 +52,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: main
+          ref: ${{ steps.branch.outputs.value }}
 
       - id: version
         name: Generate version
+        env:
+          BRANCH: ${{ steps.branch.outputs.value }}
         run: |
           SHA=$(git rev-parse HEAD)
+
+          # Sanitize branch name for use in versions and Docker tags.
+          SAFE_BRANCH=$(echo "$BRANCH" | sed 's#[^a-zA-Z0-9_.-]#-#g')
+
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "value=nightly.${GITHUB_RUN_NUMBER}+${SHA:0:7}" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "safe_branch=$SAFE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "value=nightly.${SAFE_BRANCH}.${GITHUB_RUN_NUMBER}+${SHA:0:7}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
@@ -44,18 +78,36 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate image tags
+        id: tags
+        env:
+          BRANCH: ${{ steps.branch.outputs.value }}
+          SAFE_BRANCH: ${{ steps.version.outputs.safe_branch }}
+        run: |
+          if [[ "$BRANCH" == "main" ]]; then
+            echo "value=ghcr.io/${GITHUB_REPOSITORY}:nightly" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=ghcr.io/${GITHUB_REPOSITORY}:nightly-${SAFE_BRANCH}" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           push: true
           provenance: mode=max
           sbom: true
-          tags: ghcr.io/${{ github.repository }}:nightly
+          tags: ${{ steps.tags.outputs.value }}
           platforms: linux/arm64
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=https://github.com/lklynet/aurral
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#readme
+            org.opencontainers.image.title=Aurral
+            org.opencontainers.image.description=Aurral fork - self-hosted music streaming server
+            org.opencontainers.image.licenses=AGPL-3.0
             org.opencontainers.image.revision=${{ steps.version.outputs.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.value }}
+            org.opencontainers.image.created=${{ steps.version.outputs.created }}
           build-args: |
             APP_VERSION=${{ steps.version.outputs.value }}
             GITHUB_REPO=${{ github.repository }}
