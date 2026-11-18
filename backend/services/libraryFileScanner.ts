@@ -462,7 +462,10 @@ export async function scanMusicRoot({
             result.filesIndexed += 1;
             continue;
           }
-          const metadata = await metadataReader(filePath, { skipCovers: true });
+          const metadata = await metadataReader(filePath, {
+            skipCovers: true,
+            duration: true,
+          });
           const enrichment =
             typeof metadataEnricher === "function"
               ? await metadataEnricher(metadata, filePath)
