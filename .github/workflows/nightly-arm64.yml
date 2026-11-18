@@ -108,6 +108,17 @@ jobs:
             org.opencontainers.image.revision=${{ steps.version.outputs.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.value }}
             org.opencontainers.image.created=${{ steps.version.outputs.created }}
+
+          annotations: |
+            index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            index:org.opencontainers.image.url=https://github.com/lklynet/aurral
+            index:org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#readme
+            index:org.opencontainers.image.title=Aurral
+            index:org.opencontainers.image.description=Aurral fork - self-hosted music streaming server
+            index:org.opencontainers.image.licenses=AGPL-3.0
+            index:org.opencontainers.image.revision=${{ steps.version.outputs.sha }}
+            index:org.opencontainers.image.version=${{ steps.version.outputs.value }}
+            index:org.opencontainers.image.created=${{ steps.version.outputs.created }}
           build-args: |
             APP_VERSION=${{ steps.version.outputs.value }}
             GITHUB_REPO=${{ github.repository }}
